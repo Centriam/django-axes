@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 from axes import get_version
 
 setup(
-    name='django-axes',
+    name='cntrm-django-axes',
     version=get_version(),
     description="Keep track of failed login attempts in Django-powered sites.",
     long_description=(

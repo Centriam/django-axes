@@ -56,3 +56,12 @@ ONLY_WHITELIST = getattr(settings, 'AXES_ONLY_ALLOW_WHITELIST', False)
 IP_WHITELIST = getattr(settings, 'AXES_IP_WHITELIST', None)
 
 IP_BLACKLIST = getattr(settings, 'AXES_IP_BLACKLIST', None)
+
+# flag to check if we going to look in the request.data object for the username
+USE_DRF_DATA = getattr(settings, 'AXES_USE_DRF_DATA', False)
+
+# If the USE_DRF_DATA flag is set, where should we look for the username field
+DRF_USERNAME_FORM_FIELD = getattr(settings, 'AXES_DRF_USERNAME_FORM_FIELD', 'username')
+
+# This flag will respond back the Responses with a JSON response
+DRF_RESPONSE_FORMAT = getattr(settings, 'AXES_DRF_RESPONSE_FORMAT', False)

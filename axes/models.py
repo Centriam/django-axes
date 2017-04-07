@@ -56,6 +56,11 @@ class AccessAttempt(CommonAccess):
         verbose_name='POST Data',
     )
 
+    request_data = models.TextField(
+        verbose_name='REQUEST Data',
+        null=True
+    )
+
     failures_since_start = models.PositiveIntegerField(
         verbose_name='Failed Logins',
     )

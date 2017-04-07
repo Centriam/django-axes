@@ -5,7 +5,7 @@ from hashlib import md5
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth import logout
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.utils import six
@@ -85,9 +85,9 @@ def query2str(items, max_length=1024):
     via excessively large payloads.
     """
     return '\n'.join([
-        '%s=%s' % (k, v) for k, v in six.iteritems(items)
-        if k != PASSWORD_FORM_FIELD
-    ][:int(max_length / 2)])[:max_length]
+                         '%s=%s' % (k, v) for k, v in six.iteritems(items)
+                         if k != PASSWORD_FORM_FIELD
+                     ][:int(max_length / 2)])[:max_length]
 
 
 def ip_in_whitelist(ip):
@@ -104,6 +104,19 @@ def ip_in_blacklist(ip):
     return False
 
 
+def _get_username(request, default=None):
+    if USE_DRF_DATA:
+        # We will first look in the request.data field
+        try:
+            return request.data.get(DRF_USERNAME_FORM_FIELD, default)
+        except AttributeError:
+            # We could get here if the user is logging in to the django admin
+            # in this case we will just pass and return the username from the
+            # POST which is always present
+            pass
+    return request.POST.get(USERNAME_FORM_FIELD, default)
+
+
 def is_user_lockable(request):
     """Check if the user has a profile with nolockout
     If so, then return the value to see if this user is special
@@ -118,7 +131,7 @@ def is_user_lockable(request):
     try:
         field = getattr(get_user_model(), 'USERNAME_FIELD', 'username')
         kwargs = {
-            field: request.POST.get(USERNAME_FORM_FIELD)
+            field: _get_username(request)
         }
         user = get_user_model().objects.get(**kwargs)
 
@@ -140,7 +153,7 @@ def _get_user_attempts(request):
     Otherwise return None.
     """
     ip = get_ip(request)
-    username = request.POST.get(USERNAME_FORM_FIELD, None)
+    username = _get_username(request)
 
     if AXES_ONLY_USER_FAILURES:
         attempts = AccessAttempt.objects.filter(username=username)
@@ -220,7 +233,7 @@ def watch_login(func):
         # also no need to keep accessing these:
         # ip = request.META.get('REMOTE_ADDR', '')
         # ua = request.META.get('HTTP_USER_AGENT', '<unknown>')
-        # username = request.POST.get(USERNAME_FORM_FIELD, None)
+        # username = _get_username(request)
 
         # if the request is currently under lockout, do not proceed to the
         # login function, go directly to lockout url, do not pass go, do not
@@ -255,7 +268,7 @@ def watch_login(func):
                     AccessLog.objects.create(
                         user_agent=user_agent,
                         ip_address=get_ip(request),
-                        username=request.POST.get(USERNAME_FORM_FIELD, None),
+                        username=_get_username(request),
                         http_accept=http_accept,
                         path_info=path_info,
                         trusted=not login_unsuccessful,
@@ -273,7 +286,7 @@ def watch_login(func):
 def lockout_response(request):
     context = {
         'failure_limit': FAILURE_LIMIT,
-        'username': request.POST.get(USERNAME_FORM_FIELD, '')
+        'username': _get_username(request, '')
     }
 
     if request.is_ajax():
@@ -302,6 +315,13 @@ def lockout_response(request):
         else:
             msg = msg.format('Contact an admin to unlock your account.')
 
+        if DRF_RESPONSE_FORMAT:
+            msg = {
+                "error": True,
+                "status": "FAILED",
+                "statusText": msg
+            }
+            return JsonResponse(msg, status=403)
         return HttpResponse(msg, status=403)
 
 
@@ -335,7 +355,7 @@ def is_already_locked(request):
 
 def check_request(request, login_unsuccessful):
     ip_address = get_ip(request)
-    username = request.POST.get(USERNAME_FORM_FIELD, None)
+    username = _get_username(request)
     failures = 0
     attempts = get_user_attempts(request)
     cache_hash_key = get_cache_key(request)
@@ -365,6 +385,15 @@ def check_request(request, login_unsuccessful):
                     attempt.post_data,
                     query2str(request.POST)
                 )
+                if USE_DRF_DATA:
+                    try:
+                        data = request.data
+                    except AttributeError:
+                        data = {}
+                    attempt.request_data = '%s\n---------\n%s' % (
+                        attempt.request_data,
+                        query2str(data)
+                    )
                 attempt.http_accept = \
                     request.META.get('HTTP_ACCEPT', '<unknown>')[:1025]
                 attempt.path_info = \
@@ -431,7 +460,14 @@ def check_request(request, login_unsuccessful):
 def create_new_failure_records(request, failures):
     ip = get_ip(request)
     ua = request.META.get('HTTP_USER_AGENT', '<unknown>')[:255]
-    username = request.POST.get(USERNAME_FORM_FIELD, None)
+    username = _get_username(request)
+
+    request_data = None
+    if USE_DRF_DATA:
+        try:
+            request_data = query2str(request.data)
+        except AttributeError:
+            pass
 
     # Record failed attempt. Whether or not the IP address or user agent is
     # used in counting failures is handled elsewhere, so we just record
@@ -442,6 +478,7 @@ def create_new_failure_records(request, failures):
         username=username,
         get_data=query2str(request.GET),
         post_data=query2str(request.POST),
+        request_data=request_data,
         http_accept=request.META.get('HTTP_ACCEPT', '<unknown>'),
         path_info=request.META.get('PATH_INFO', '<unknown>'),
         failures_since_start=failures,
@@ -452,10 +489,17 @@ def create_new_failure_records(request, failures):
 def create_new_trusted_record(request):
     ip = get_ip(request)
     ua = request.META.get('HTTP_USER_AGENT', '<unknown>')[:255]
-    username = request.POST.get(USERNAME_FORM_FIELD, None)
+    username = _get_username(request)
 
     if not username:
         return False
+
+    request_data = None
+    if USE_DRF_DATA:
+        try:
+            request_data = query2str(request.data)
+        except AttributeError:
+            pass
 
     AccessAttempt.objects.create(
         user_agent=ua,
@@ -463,6 +507,7 @@ def create_new_trusted_record(request):
         username=username,
         get_data=query2str(request.GET),
         post_data=query2str(request.POST),
+        request_data=request_data,
         http_accept=request.META.get('HTTP_ACCEPT', '<unknown>'),
         path_info=request.META.get('PATH_INFO', '<unknown>'),
         failures_since_start=0,
@@ -478,21 +523,31 @@ def get_cache_key(request_or_object):
     """
     ua = None
     ip = None
+    un = None
 
     if isinstance(request_or_object, AccessAttempt):
         ip = request_or_object.ip_address
         ua = request_or_object.user_agent
+        un = request_or_object.username
     else:
         ip = get_ip(request_or_object)
         ua = request_or_object.META.get('HTTP_USER_AGENT', '<unknown>')[:255]
+        un = _get_username(request_or_object)
 
+    # Add the ip address as the only necessary part of the cache key
     ip = ip.encode('utf-8')
+    key = ip
 
+    # if we have a user agent, add it to the cache key
     if ua:
-        ua = ua.encode('utf-8')
-        cache_hash_key = 'axes-{}'.format(md5(ip+ua).hexdigest())
-    else:
-        cache_hash_key = 'axes-{}'.format(md5(ip).hexdigest())
+        key = key + ua.encode('utf-8')
+
+    # if we have a user name, add it to the cache key
+    if un:
+        key = key + un.encode('utf-8')
+
+    # Make the hash key from the above data
+    cache_hash_key = 'axes-{}'.format(md5(key).hexdigest())
 
     return cache_hash_key
 

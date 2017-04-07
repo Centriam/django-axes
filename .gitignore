@@ -7,3 +7,15 @@ dist
 docs/_build
 .tox/
 tox.ini
+
+*.iml
+
+cntrm_django_axes.egg-info/dependency_links.txt
+
+cntrm_django_axes.egg-info/not-zip-safe
+
+cntrm_django_axes.egg-info/PKG-INFO
+
+cntrm_django_axes.egg-info/SOURCES.txt
+
+cntrm_django_axes.egg-info/top_level.txt

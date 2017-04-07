@@ -34,7 +34,7 @@ class AccessAttemptAdmin(admin.ModelAdmin):
             'fields': ('path_info', 'failures_since_start')
         }),
         ('Form Data', {
-            'fields': ('get_data', 'post_data')
+            'fields': ('get_data', 'post_data', 'request_data')
         }),
         ('Meta Data', {
             'fields': ('user_agent', 'ip_address', 'http_accept')
@@ -51,6 +51,7 @@ class AccessAttemptAdmin(admin.ModelAdmin):
         'attempt_time',
         'get_data',
         'post_data',
+        'request_data',
         'failures_since_start'
     ]
 
