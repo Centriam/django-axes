@@ -213,8 +213,9 @@ class AccessAttemptTest(TestCase):
         # Getting cache key from request
         ip = '127.0.0.1'.encode('utf-8')
         ua = '<unknown>'.encode('utf-8')
+        un = self.VALID_USERNAME.encode('utf-8')
 
-        cache_hash_key_checker = 'axes-{}'.format(md5((ip+ua)).hexdigest())
+        cache_hash_key_checker = 'axes-{}'.format(md5((ip+ua+un)).hexdigest())
 
         request_factory = RequestFactory()
         request = request_factory.post('/admin/login/',
